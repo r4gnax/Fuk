@@ -48,6 +48,7 @@ def _pad(s):
 def _unpad(s):
     return s[:-ord(s[len(s)-1:])]
 
+
 random_gen = Random.new().read
 local_rsa_key = RSA.generate(2048, random_gen)
 local_rsa_pub_key = local_rsa_key.publickey()
