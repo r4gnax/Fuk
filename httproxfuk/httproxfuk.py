@@ -38,6 +38,7 @@ class Prox:
         conn.sendall(resp)
 
     def handle_req(self, conn, request):
+        print request
         req_lines = request.strip().split("\r\n")
         get_line = req_lines[0].strip()
         method,url,proto=get_line.strip().split()
@@ -63,7 +64,9 @@ class Prox:
         print "New request to " + target_host + ":" + str(target_port) + ". Edit it?"
         if raw_input("> ").lower() in ("y", "yes"):
             request = self.edit_req(request)
-        self.response_back(conn, resp)
+        response=self.forward_req(target_host, target_port, request)
+        if response:
+            self.response_back(conn, response)
 
     def edit_req(self, request):
         with open("/tmp/.tmp_req", "wb") as f:
