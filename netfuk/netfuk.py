@@ -19,77 +19,93 @@ import socket
 import threading
 
 
+DEBUG = True # Set to False and you'll turn into ninja mode
+
 target  = ""
-port    = -1
+port    = 0
 listen  = False
+ipv6    = False
 cmd     = None
 binary  = None
 
 
+class DevNull:
+    def write(self, msg):
+        pass
+if not DEBUG:
+    sys.stderr = DevNull()
+
 def log(status, msg):
-    if status is 'e': # ERROR
-        sys.stdout.write("\033[91m[x] ")
-    elif status is 'w': # WARNING
-        sys.stdout.write("\033[93m[!] ")
-    elif status is 'i': # INFO
-        sys.stdout.write("\033[92m[*] ")
-    elif status is 's': # SUBINFO
-        sys.stdout.write("\033[95m[~] ")
-    sys.stdout.write(str(msg))
-    sys.stdout.write('\033[0m\n')
-    sys.stdout.flush()
+    if DEBUG:
+        if status is 'e': # ERROR
+            sys.stdout.write("\033[91m[x] ")
+        elif status is 'w': # WARNING
+            sys.stdout.write("\033[93m[!] ")
+        elif status is 'i': # INFO
+            sys.stdout.write("\033[92m[*] ")
+        elif status is 's': # SUBINFO
+            sys.stdout.write("\033[95m[~] ")
+        sys.stdout.write(str(msg))
+        sys.stdout.write('\033[0m\n')
+        sys.stdout.flush()
 
-def main():
-
-    global target
-    global port
-    global listen
-    global cmd
-    global binary
-
-
+def parse_args():
     # Use -h to get the beautiful usage() of argparse
     parser = argparse.ArgumentParser(description='The swiss knife of hackers')
     parser.add_argument('-l', action="store_true", dest="arg_listen", help="Listen mode", default=False)
+    parser.add_argument('-6', action="store_true", dest="arg_ipv6", help="use ipv6", default=False)
     parser.add_argument('ip', metavar="IP", type=str, help="Ip to bind/connect", nargs="?", default="0.0.0.0")
     parser.add_argument('port', metavar="PORT", type=int, action="store", help="Port to bind/connect")
     parser.add_argument('-c', action="store", dest="arg_cmd", help="Execute a command upon connection", default=None)
     parser.add_argument('-e', action="store", dest="arg_bin", help="Binary to execute upon connection", default=None)
 
     results = parser.parse_args()
-    target = results.ip
-    port = results.port
-    listen = results.arg_listen
-    cmd = results.arg_cmd
-    binary = results.arg_bin
+    return (results.ip,results.port,results.arg_listen,results.arg_ipv6,results.arg_cmd,results.arg_bin)
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+
+def main():
+
+    global target
+    global port
+    global listen
+    global ipv6
+    global cmd
+    global binary
 
     try:
-        target=socket.gethostbyname(target)
+        (target, port, listen, ipv6, cmd, binary) = parse_args()
+        try:
+            target=socket.gethostbyname(target)
+        except Exception, e:
+            log('e', "Error: Not valid ip/hostname")
+            log('s', e)
+            sys.exit(-1)
+
+        if cmd is not None and binary is not None:
+            log('e', "Error: Please chose either a cmd to execute or a binary, not both.")
+            sys.exit(-1)
+
+        if port < 1 or port > 65535:
+            log('e', "Error: Port out of bounds. (Port must be between 0 and 65535)")
+            sys.exit(-1)
+
+        if not listen:
+            connection_handler()
+        else:
+            server_loop()
+
     except Exception, e:
-        log('e', "Error: Not valid ip/hostname")
-        log('s', e)
-        sys.exit(-1)
-
-    if cmd is not None and binary is not None:
-        log('e', "Error: Please chose either a cmd to execute or a binary, not both.")
-        sys.exit(-1)
-
-    if port < 0 or port > 65535:
-        log('e', "Error: Port out of bounds. (Port must be between 0 and 65535)")
-        sys.exit(-1)
-
-    if not listen:
-        connection_handler()
-
-    if listen:
-        server_loop()
+        if not DEBUG:
+            pass
 
 
 
 def connection_handler():
-    sock_target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if ipv6:
+        sock_target = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    else:
+        sock_target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock_target.connect((target, port))
     if binary is not None:
         run_binary(sock_target, binary)
@@ -103,7 +119,6 @@ def connection_handler():
         buffer = ""
         if not sys.stdin.isatty():
             buffer = sys.stdin.read()
-            buffer += "\n"
         client_send_thr=threading.Thread(target=client_send, args=(sock_target, buffer,))
         client_send_thr.daemon = True
         client_send_thr.start()
@@ -112,8 +127,8 @@ def connection_handler():
             client_send_thr.join(600)
             if not client_recv_thr.isAlive() and not client_send_thr.isAlive():
                 break
+
         sock_target.close()
-        sys.exit(-1)
 
     
 
@@ -128,7 +143,6 @@ def client_send(sock_target, buffer):
     except KeyboardInterrupt:
         return
     except Exception, e:
-        log('e', e + " at client_send()")
         return
 
 
@@ -146,7 +160,6 @@ def client_recv(sock_target):
         except KeyboardInterrupt:
             return
         except Exception, e:
-            log('e', e + " at client_recv()")
             return
 
         sys.stdout.write(response)
@@ -159,7 +172,10 @@ def server_loop():
         log('w', "Listening interface not set, listening on all interfaces.")
         target = "0.0.0.0"
         
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if ipv6:
+        server = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    else:
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((target, port))
     server.listen(5)
@@ -175,10 +191,7 @@ def server_loop():
 
 def run_command(cmd):
     cmd=cmd.strip()
-    try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
-    except Exception, e:
-        log('e', e + " at run_command()")
+    out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     return out
 
 
@@ -190,7 +203,6 @@ def run_binary(sock,binary):
         os.dup2(sock.fileno(),2)
         subprocess.call(binary.split(), shell=True)
     except Exception, e:
-        log('e', e + " at run_binary()")
         return
     
 
