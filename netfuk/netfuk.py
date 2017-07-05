@@ -102,6 +102,9 @@ def main():
 
 
 def connection_handler():
+    if target == '0.0.0.0':
+        log('e', 'Please specify a target (use -h for help)')
+        sys.exit(-1)
     if ipv6:
         sock_target = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     else:
