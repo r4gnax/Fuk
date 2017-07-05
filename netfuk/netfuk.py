@@ -49,7 +49,7 @@ def main():
     # Use -h to get the beautiful usage() of argparse
     parser = argparse.ArgumentParser(description='The swiss knife of hackers')
     parser.add_argument('-l', action="store_true", dest="arg_listen", help="Listen mode", default=False)
-    parser.add_argument('ip', metavar="IP", type=str, action="store", help="Ip to bind/connect")
+    parser.add_argument('ip', metavar="IP", type=str, help="Ip to bind/connect", nargs="?", default="0.0.0.0")
     parser.add_argument('port', metavar="PORT", type=int, action="store", help="Port to bind/connect")
     parser.add_argument('-c', action="store", dest="arg_cmd", help="Execute a command upon connection", default=None)
     parser.add_argument('-e', action="store", dest="arg_bin", help="Binary to execute upon connection", default=None)
@@ -126,7 +126,7 @@ def client_send(sock_target, buffer):
     except KeyboardInterrupt:
         return
     except Exception, e:
-        log('e', e)
+        log('e', e + " at client_send()")
         return
 
 
@@ -144,7 +144,7 @@ def client_recv(sock_target):
         except KeyboardInterrupt:
             return
         except Exception, e:
-            log('e', e)
+            log('e', e + " at client_recv()")
             return
 
         sys.stdout.write(response)
@@ -164,12 +164,11 @@ def server_loop():
     log('i', "Listening on %s:%i..." % (target, port))
 
     while True:
-        try:
-            client_sock, addr = server.accept()
-            log('s', 'New connection from %s:%i !' % (addr[0], addr[1]))
-            client_handler(client_sock)
-        except KeyboardInterrupt:
-            return
+        client_sock, addr = server.accept()
+        log('s', 'New connection from %s:%i !' % (addr[0], addr[1]))
+        handler_thr=threading.Thread(target=client_handler, args=(client_sock,))
+        handler_thr.daemon = True
+        handler_thr.start()
 
 
 def run_command(cmd):
@@ -177,23 +176,26 @@ def run_command(cmd):
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     except Exception, e:
-        log('e', e)
+        log('e', e + " at run_command()")
     return out
 
 
 
 def run_binary(sock,binary):
-    os.dup2(sock.fileno(),0)
-    os.dup2(sock.fileno(),1)
-    os.dup2(sock.fileno(),2)
-    subprocess.call(binary.split(), shell=True)
+    try:
+        os.dup2(sock.fileno(),0)
+        os.dup2(sock.fileno(),1)
+        os.dup2(sock.fileno(),2)
+        subprocess.call(binary.split(), shell=True)
+    except Exception, e:
+        log('e', e + " at run_binary()")
+        return
     
 
 def client_handler(client_sock):
     global binary
     global cmd
     
-
     if binary is not None:
         run_binary(client_sock, binary)
     if cmd is not None:
