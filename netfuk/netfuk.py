@@ -19,7 +19,6 @@ import socket
 import threading
 
 
-DEBUG = True # Set to False and you'll turn into ninja mode
 
 target  = ""
 port    = 0
@@ -27,16 +26,18 @@ listen  = False
 ipv6    = False
 cmd     = None
 binary  = None
+single  = False
+verbose = False
 
 
 class DevNull:
     def write(self, msg):
         pass
-if not DEBUG:
+if not verbose:
     sys.stderr = DevNull()
 
 def log(status, msg):
-    if DEBUG:
+    if verbose:
         if status is 'e': # ERROR
             sys.stdout.write("\033[91m[x] ")
         elif status is 'w': # WARNING
@@ -53,14 +54,17 @@ def parse_args():
     # Use -h to get the beautiful usage() of argparse
     parser = argparse.ArgumentParser(description='The swiss knife of hackers')
     parser.add_argument('-l', action="store_true", dest="arg_listen", help="Listen mode", default=False)
-    parser.add_argument('-6', action="store_true", dest="arg_ipv6", help="use ipv6", default=False)
+    parser.add_argument('-6', action="store_true", dest="arg_ipv6", help="Use ipv6", default=False)
     parser.add_argument('ip', metavar="IP", type=str, help="Ip to bind/connect", nargs="?", default="0.0.0.0")
     parser.add_argument('port', metavar="PORT", type=int, action="store", help="Port to bind/connect")
     parser.add_argument('-c', action="store", dest="arg_cmd", help="Execute a command upon connection", default=None)
     parser.add_argument('-e', action="store", dest="arg_bin", help="Binary to execute upon connection", default=None)
+    parser.add_argument('-s', '--single', action="store_true", dest="arg_single", help="Accept first connection, do one action then quit", default=False)
+    parser.add_argument('-v', '--verbose', action="store_true", dest="arg_verbose", help="Debug yo", default=False)
+
 
     results = parser.parse_args()
-    return (results.ip,results.port,results.arg_listen,results.arg_ipv6,results.arg_cmd,results.arg_bin)
+    return (results.ip,results.port,results.arg_listen,results.arg_ipv6,results.arg_cmd,results.arg_bin,results.arg_single,results.arg_verbose)
 
 
 
@@ -72,14 +76,15 @@ def main():
     global ipv6
     global cmd
     global binary
+    global single
+    global verbose
 
     try:
-        (target, port, listen, ipv6, cmd, binary) = parse_args()
+        (target, port, listen, ipv6, cmd, binary, single, verbose) = parse_args()
         try:
             target=socket.gethostbyname(target)
         except Exception, e:
             log('e', "Error: Not valid ip/hostname")
-            log('s', e)
             sys.exit(-1)
 
         if cmd is not None and binary is not None:
@@ -109,29 +114,11 @@ def connection_handler():
         sock_target = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     else:
         sock_target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock_target.connect((target, port))
-    if binary is not None:
-        run_binary(sock_target, binary)
-    if cmd is not None:
-        output = run_command(cmd)
-        sock_target.send(output)
-    else:
-        client_recv_thr=threading.Thread(target=client_recv, args=(sock_target,))
-        client_recv_thr.daemon = True
-        client_recv_thr.start()
-        buffer = ""
-        if not sys.stdin.isatty():
-            buffer = sys.stdin.read()
-        client_send_thr=threading.Thread(target=client_send, args=(sock_target, buffer,))
-        client_send_thr.daemon = True
-        client_send_thr.start()
-        while True:
-            client_recv_thr.join(600)
-            client_send_thr.join(600)
-            if not client_recv_thr.isAlive() and not client_send_thr.isAlive():
-                break
 
-        sock_target.close()
+    sock_target.connect((target, port))
+    log('i', 'Connected to %s:%i!' % (target, port))
+    client_handler(sock_target)
+    sock_target.close()
 
     
 
@@ -139,9 +126,12 @@ def client_send(sock_target, buffer):
     try:
         if len(buffer):
             sock_target.send(buffer)
-        while True:
-            buffer = raw_input("")
-            buffer += "\n"
+        if not single:
+            while True:
+                buffer = raw_input("")
+                buffer += "\n"
+                sock_target.send(buffer)
+        else:
             sock_target.send(buffer)
     except KeyboardInterrupt:
         return
@@ -160,6 +150,8 @@ def client_recv(sock_target):
                 response += data
                 if recv_len < 4096:
                     break
+            if single:
+                break
         except KeyboardInterrupt:
             return
         except Exception, e:
@@ -168,10 +160,9 @@ def client_recv(sock_target):
         sys.stdout.write(response)
         sys.stdout.flush()
 
-
 def server_loop():
     global target
-    if not len(target):
+    if  target == "0.0.0.0":
         log('w', "Listening interface not set, listening on all interfaces.")
         target = "0.0.0.0"
         
@@ -184,12 +175,17 @@ def server_loop():
     server.listen(5)
     log('i', "Listening on %s:%i..." % (target, port))
 
-    while True:
+    if not single:
+        while True:
+            client_sock, addr = server.accept()
+            log('s', 'New connection from %s:%i !' % (addr[0], addr[1]))
+            handler_thr=threading.Thread(target=client_handler, args=(client_sock,))
+            handler_thr.daemon = True
+            handler_thr.start()
+    else:
         client_sock, addr = server.accept()
         log('s', 'New connection from %s:%i !' % (addr[0], addr[1]))
-        handler_thr=threading.Thread(target=client_handler, args=(client_sock,))
-        handler_thr.daemon = True
-        handler_thr.start()
+        client_handler(client_sock)
 
 
 def run_command(cmd):
@@ -212,7 +208,6 @@ def run_binary(sock,binary):
 def client_handler(client_sock):
     global binary
     global cmd
-    
     if binary is not None:
         run_binary(client_sock, binary)
     if cmd is not None:
@@ -227,10 +222,12 @@ def client_handler(client_sock):
         client_send_thr.daemon = True
         client_send_thr.start()
         while True:
-            client_recv_thr.join(600)
-            client_send_thr.join(600)
-            if not client_recv_thr.isAlive() or client_send_thr.isAlive():
+            client_recv_thr.join(1)
+            client_send_thr.join(1)
+            if (not client_recv_thr.isAlive() and not client_send_thr.isAlive()):
                 break
+
+            
 
 
 main()
