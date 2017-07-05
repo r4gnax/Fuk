@@ -110,7 +110,7 @@ def connection_handler():
         while True:
             client_recv_thr.join(600)
             client_send_thr.join(600)
-            if not client_recv_thr.isAlive() or client_send_thr.isAlive():
+            if not client_recv_thr.isAlive() or not client_send_thr.isAlive():
                 break
         sock_target.close()
         sys.exit(-1)
