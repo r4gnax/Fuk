@@ -210,7 +210,6 @@ def server_loop():
     global target
     if  target == "0.0.0.0":
         log('w', "Listening interface not set, listening on all interfaces.")
-        target = "0.0.0.0"
         
     if ipv6:
         server = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
