@@ -27,7 +27,7 @@ def random_str(length):
     return ''.join(random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-_$!?+*#@") for _ in range(length))
 
 delay = 1
-host = '127.0.0.1'
+host = '10.0.0.137'
 port = 31337
 
 def AES_encode(k, s):

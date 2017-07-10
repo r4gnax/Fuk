@@ -17,7 +17,6 @@
 
 
 import sys
-import argparse
 import subprocess
 import os
 import socket
@@ -137,7 +136,6 @@ def log(status, msg):
 
 
 def main():
-
     global target
     global port
     global listen
@@ -146,9 +144,9 @@ def main():
     global binary
     global single
     global verbose
-
+    
     try:
-        (target, port, listen, ipv6, cmd, binary, single, verbose) = parse_args()
+        (target,port,listen,ipv6,cmd,binary,single,verbose) = parse_args()
         try:
             target=socket.gethostbyname(target)
         except Exception, e:
@@ -169,25 +167,47 @@ def main():
             server_loop()
 
     except Exception, e:
+        print e
         if not DEBUG:
             pass
 
 
-def parse_args():
-    # Use -h to get the beautiful usage() of argparse
-    parser = argparse.ArgumentParser(description='The swiss knife for network stuff')
-    parser.add_argument('-l','--listen', action="store_true", dest="arg_listen", help="Listen mode", default=False)
-    parser.add_argument('-6','--ipv6', action="store_true", dest="arg_ipv6", help="Use ipv6", default=False)
-    parser.add_argument('ip', metavar="IP", type=str, help="Ip to bind/connect", nargs="?", default="0.0.0.0")
-    parser.add_argument('port', metavar="PORT", type=int, action="store", help="Port to bind/connect")
-    parser.add_argument('-c', action="store", dest="arg_cmd", help="Execute a command upon connection", default=None)
-    parser.add_argument('-e', action="store", dest="arg_bin", help="Binary to execute upon connection", default=None)
-    parser.add_argument('-s', '--single', action="store_true", dest="arg_single", help="Accept first connection, do one action then quit", default=False)
-    parser.add_argument('-v', '--verbose', action="store_true", dest="arg_verbose", help="Debug yo", default=False)
+def parse_args():    
+    arg_target = "0.0.0.0"
+    arg_port = 0
+    arg_listen = False
+    arg_ipv6 = False
+    arg_cmd = None
+    arg_binary = None
+    arg_single = False
+    arg_verbose = False
+    
+    i=0
+    while i < len(sys.argv):
+        if sys.argv[i] == '-l' or sys.argv[i] == '--listen':
+            arg_listen = True
+        elif sys.argv[i] == '-6' or sys.argv[i] == '--ipv6':
+            arg_ipv6 = True
+        elif sys.argv[i] == '-s' or sys.argv[i] == '--single':
+            arg_single = True
+        elif sys.argv[i] == '-v' or sys.argv[i] == '--verbose':
+            arg_verbose = True
+        elif sys.argv[i] == '-c':
+            arg_cmd = sys.argv[i+1]
+            i+=1
+        elif sys.argv[i] == '-e':
+            arg_binary = sys.argv[i+1]
+            i+=1
+        else:
+            try:
+                arg_port = int(sys.argv[i])
+            except:
+                if len(sys.argv[i].split(".")) == 4:
+                    arg_target = sys.argv[i]
+                pass
+        i+=1
 
-
-    results = parser.parse_args()
-    return (results.ip,results.port,results.arg_listen,results.arg_ipv6,results.arg_cmd,results.arg_bin,results.arg_single,results.arg_verbose)
+    return (arg_target,arg_port,arg_listen,arg_ipv6,arg_cmd,arg_binary,arg_single,arg_verbose)
 
 
 def run_binary(sock,binary):
