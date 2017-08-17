@@ -10,7 +10,6 @@ import datetime
 import time
 import subprocess
 import threading
-import Queue
 import socket
 import socks
 import ssl
@@ -23,16 +22,14 @@ sys.dont_write_bytecode = True
 total_threads=conf.max_threads
 
 threads = []
-q = Queue.Queue()
 lock = threading.RLock()
 t_zero = time.time()
 servers={}
 
 class fuk_thread (threading.Thread):
-    def __init__(self, thrID, q):
+    def __init__(self, thrID):
             threading.Thread.__init__(self)
             self.name = "thr"+str(thrID)
-            self.q = q
             self.nick = conf.nick
             self.exploit = conf.exploit
             self.timeout = conf.timeout
@@ -55,11 +52,10 @@ class fuk_thread (threading.Thread):
             self.sock = None
 
     def run(self):
-            while not self.q.empty():
+            while not len(conf.servers) == 0:
                     lock.acquire()
-                    self.ip = self.q.get()
                     lock.release()
-                    self.config = conf.servers[self.ip]
+                    (self.ip, self.config) = conf.servers.popitem()
                     self.channels = self.config["channels"]
                     self.connect()
 
@@ -306,20 +302,13 @@ def random_int(min,max):
 def random_str(length):
     return ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(length))
 
-def init_queue():
-    for i in conf.servers:
-        q.put(i)
-    return len(conf.servers)
-
-
-
 def start(total_threads):
-    cnt=init_queue()
+    cnt=len(conf.servers)
     if total_threads > cnt:
         total_threads=cnt
 
     for i in xrange(total_threads):
-        t = fuk_thread(i, q)
+        t = fuk_thread(i)
         t.daemon = True
         t.start()
         threads.append(t)

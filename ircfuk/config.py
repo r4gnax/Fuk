@@ -14,7 +14,7 @@ minimum_users = 10
 
 
 servers = {
-        "irc.freenode.net": {"ipv6": False, "ssl": False, "port": 6667, "password": None, "channels":['#beetch']},
+        "127.0.0.1": {"ipv6": False, "ssl": False, "port": 6667, "password": None, "channels":['#yo']},
 }
 
 
